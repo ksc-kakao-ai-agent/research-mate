@@ -40,8 +40,10 @@ class ChatbotAgent:
         if not history:
             return "없음"
         
+        recent_history = history[-2:]
+        
         formatted_text = ""
-        for i, chat in enumerate(history):
+        for i, chat in enumerate(recent_history):
             formatted_text += f"Q{i+1}: {chat.question}\n"
             formatted_text += f"A{i+1}: {chat.answer}\n"
             
@@ -55,16 +57,23 @@ class ChatbotAgent:
         paper_id: int,
         question: str,
         relevant_history: List[ChatHistory] = None
-    ) -> str:
+    ) -> ChatHistory:
+        
         """
         Kanana LLM에 전달할 RAG(Retrieval-Augmented Generation) 스타일의 프롬프트를 구성합니다.
         full_text는 MAX_TEXT_LENGTH에 맞게 잘라서 사용합니다.
         """
+
         # 1. DB에서 논문 정보 및 텍스트 가져오기 (paper_metadata.full_text 조회)
         full_text = self._get_paper_full_text(db, paper_id)
         
         if not full_text:
-            return "현재 이 논문의 full text가 등록되어 있지 않아 답변을 생성할 수 없습니다."
+            return ChatHistory(
+                user_id=user_id,
+                paper_id=paper_id,
+                question=question,
+                answer="현재 이 논문의 full text가 등록되어 있지 않아 답변을 생성할 수 없습니다."
+            )
         
         # 2. Kanana에 전달할 프롬프트 구성
         MAX_TEXT_LENGTH = 5000 
@@ -113,6 +122,8 @@ class ChatbotAgent:
             )
             db.add(new_chat)
             db.commit()
+            db.refresh(new_chat)
+            return new_chat
         except Exception as e:
             logger.error(f"ChatHistory 저장 중 DB 오류 발생: User {user_id}, Paper {paper_id}, Error: {e}", exc_info=True)
             db.rollback()
