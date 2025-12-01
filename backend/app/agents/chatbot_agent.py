@@ -32,6 +32,20 @@ class ChatbotAgent:
             return None
         
         return None
+    
+    def _format_history_for_prompt(self, history: List[ChatHistory]) -> str:
+        """
+        ChatHistory 객체 리스트를 LLM 프롬프트용 텍스트 형식으로 변환합니다.
+        """
+        if not history:
+            return "없음"
+        
+        formatted_text = ""
+        for i, chat in enumerate(history):
+            formatted_text += f"Q{i+1}: {chat.question}\n"
+            formatted_text += f"A{i+1}: {chat.answer}\n"
+            
+        return formatted_text.strip()
 
 
     async def generate_response(
@@ -39,7 +53,8 @@ class ChatbotAgent:
         db: Session,
         user_id: int,
         paper_id: int,
-        question: str
+        question: str,
+        relevant_history: List[ChatHistory] = None
     ) -> str:
         """
         Kanana LLM에 전달할 RAG(Retrieval-Augmented Generation) 스타일의 프롬프트를 구성합니다.
@@ -58,17 +73,25 @@ class ChatbotAgent:
         if len(full_text) > MAX_TEXT_LENGTH:
             text_preview += "..."
         
+        history_text = self._format_history_for_prompt(relevant_history or [])
+        
         prompt = f"""
-        당신은 아래 주어진 '논문 내용'을 기반으로 '사용자의 질문'에 답해야 하는 논문 분석 AI입니다.
-        **외부 정보는 절대 사용하지 마세요.** 오직 주어진 논문 내용만으로 답변을 생성해야 합니다.
+        당신은 아래 주어진 '논문 내용'과 '이전 대화'를 기반으로 '사용자의 새 질문'에 답해야 하는 논문 분석 AI입니다.
+        **외부 정보는 절대 사용하지 마세요.** 오직 주어진 논문 내용과 대화 맥락만으로 답변을 생성해야 합니다.
 
         --- 논문 내용 (Paper full text) ---
         {text_preview}
         ----------------------------------
 
-        사용자의 질문: {question}
+        --- 이전 대화 (Context) ---
+        {history_text}
+        ----------------------------------
 
-        위 논문 텍스트를 참조하여 질문에 친절하고 정확하게 답변해주세요.
+        --- 새 질문 ---
+        {question}
+        ----------------------------------
+
+        위 논문 텍스트와 이전 대화 내용을 참조하여 질문에 친절하고 정확하게 답변해주세요.
         """
     
         # 3. Kanana 함수 호출 (동기 함수 call_kanana 호출)
