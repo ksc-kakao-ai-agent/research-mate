@@ -41,7 +41,8 @@ class Paper(Base):
 
     # relations
     paper_metadata = relationship("PaperMetadata", back_populates="paper", uselist=False, cascade="all, delete-orphan")
-    recommendations = relationship("Recommendation", back_populates="paper", cascade="all, delete-orphan")
+    recommendations = relationship("Recommendation", back_populates="paper", cascade="all, delete-orphan", foreign_keys="[Recommendation.paper_id]")
+    #위에 foreign_keys="[Recommendation.paper_id]" 추가
     read_by_users = relationship("UserReadPaper", back_populates="paper", cascade="all, delete-orphan")
     chats = relationship("ChatHistory", back_populates="paper", cascade="all, delete-orphan")
 
@@ -85,7 +86,8 @@ class PaperMetadata(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # relation
-    paper = relationship("Paper", back_populates="metadata")
+    paper = relationship("Paper", back_populates="paper_metadata")
+    #metadata->paper_metadata로 수정
 
 
 # --------------------------
@@ -103,7 +105,8 @@ class Recommendation(Base):
     requested_paper_id = Column(Integer, ForeignKey("papers.paper_id", ondelete="SET NULL"), nullable=True)
 
     user = relationship("User", back_populates="recommendations")
-    paper = relationship("Paper", back_populates="recommendations")
+    paper = relationship("Paper", back_populates="recommendations", foreign_keys=[paper_id])
+    #위에 foreign_keys=[paper_id] 추가
 
 
 # --------------------------
