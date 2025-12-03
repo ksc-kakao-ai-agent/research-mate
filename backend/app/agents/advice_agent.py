@@ -42,7 +42,7 @@ class AdviceAgent:
                 else: # JSON이지만 리스트가 아닌 경우 (예: {"key": "value"}) 또는 단일 문자열로 저장된 경우
                     all_keywords.append(str(parsed))
             except json.JSONDecodeError: # JSON이 아니면 그냥 문자열로 처리
-                all_keywords.append(keyword_data)
+               pass
 
         # 2. 최근 1주일 챗봇 질문 기록 (ChatHistory)
         recent_questions = (
@@ -61,6 +61,104 @@ class AdviceAgent:
             "questions": recent_question_texts,
             "total_read_count": total_read_count
         }
+    
+    # ============================================
+    # API 스펙에 맞는 구조화된 조언 생성
+    # ============================================
+    async def analyze_and_suggest(
+        self,
+        db: Session,
+        user_id: int
+    ) -> dict:
+        """
+        사용자 활동을 분석하여 관심 분야/난이도 변경 제안 또는 조언 없음을 반환합니다.
+        
+        Returns:
+            dict: {
+                "advice_type": "interest_change" | "level_change" | "none",
+                ... (각 타입에 맞는 추가 필드)
+            }
+        """
+        user = db.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            return {
+                "advice_type": "none",
+                "message": "사용자 정보를 찾을 수 없습니다."
+            }
+
+        analysis_data = self._get_analysis_data(db, user_id)
+
+        if analysis_data["total_read_count"] == 0:
+            return {
+                "advice_type": "none",
+                "message": "아직 읽은 논문 기록이 없어요. 첫 논문을 읽어보시면 맞춤 조언을 드릴 수 있어요!"
+            }
+
+        # ----------------------------------------
+        # 1. 관심 분야 변경 제안 로직
+        # ----------------------------------------
+        keywords = analysis_data['keywords']
+
+
+        if len(keywords) >= 5:  # 충분한 데이터가 있을 때
+            # 키워드 빈도 계산
+            keyword_freq = {}
+            for kw in keywords:
+                kw_lower = kw.lower().strip()
+                if kw_lower:
+                    keyword_freq[kw_lower] = keyword_freq.get(kw_lower, 0) + 1
+            
+            # 가장 빈번한 키워드 추출
+            if keyword_freq:
+                top_keyword = max(keyword_freq.items(), key=lambda x: x[1])[0]
+                current_interest_lower = (user.interest or "").lower().strip()
+
+            # 현재 관심 분야와 다른 키워드가 주로 나타날 경우
+            if current_interest_lower and top_keyword not in current_interest_lower and current_interest_lower not in top_keyword:
+                # 빈도가 충분히 높은지 확인 (전체 키워드의 30% 이상)
+                if keyword_freq[top_keyword] >= len(keywords) * 0.3:
+                    return {
+                        "advice_type": "interest_change",
+                        "current_interest": user.interest or "미설정",
+                        "suggested_interest": top_keyword.title(),
+                        "reason": f"최근 '{top_keyword}'에 대한 관심이 많아지신 것 같아요. 관심 분야를 변경할까요?"
+                    }
+
+        # ----------------------------------------
+        # 2. 난이도 변경 제안 로직
+        # ----------------------------------------
+        questions = analysis_data['questions']
+        if len(questions) >= 3 and user.level:
+            # 간단한 휴리스틱: 질문 길이와 복잡도로 이해도 추정
+            avg_question_length = sum(len(q) for q in questions) / len(questions)
+            
+            # Beginner -> Intermediate 제안
+            if user.level == "beginner" and avg_question_length > 100:
+                return {
+                    "advice_type": "level_change",
+                    "current_level": user.level,
+                    "suggested_level": "intermediate",
+                    "reason": f"최근 '{user.interest or '연구 분야'}'에 대한 질문들이 깊이 있어지고 있어요. 레벨을 높여볼까요?",
+                    "comprehension_score": 75
+                }
+            # Intermediate -> Advanced 제안
+            elif user.level == "intermediate" and avg_question_length > 150:
+                return {
+                    "advice_type": "level_change",
+                    "current_level": user.level,
+                    "suggested_level": "advanced",
+                    "reason": f"최근 '{user.interest or '연구 분야'}'에 대한 이해도가 높아지신 것 같아요. 레벨을 높여볼까요?",
+                    "comprehension_score": 85
+                }
+
+        # ----------------------------------------
+        # 3. 조언 없음
+        # ----------------------------------------
+        return {
+            "advice_type": "none",
+            "message": "오늘도 열심히 논문 공부를 해보아요!"
+        }
+
 
     async def generate_study_advice(
         self,
