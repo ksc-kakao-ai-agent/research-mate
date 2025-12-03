@@ -32,6 +32,22 @@ class ChatbotAgent:
             return None
         
         return None
+    
+    def _format_history_for_prompt(self, history: List[ChatHistory]) -> str:
+        """
+        ChatHistory 객체 리스트를 LLM 프롬프트용 텍스트 형식으로 변환합니다.
+        """
+        if not history:
+            return "없음"
+        
+        recent_history = history[-2:]
+        
+        formatted_text = ""
+        for i, chat in enumerate(recent_history):
+            formatted_text += f"Q{i+1}: {chat.question}\n"
+            formatted_text += f"A{i+1}: {chat.answer}\n"
+            
+        return formatted_text.strip()
 
 
     async def generate_response(
@@ -39,17 +55,25 @@ class ChatbotAgent:
         db: Session,
         user_id: int,
         paper_id: int,
-        question: str
-    ) -> str:
+        question: str,
+        relevant_history: List[ChatHistory] = None
+    ) -> ChatHistory:
+        
         """
         Kanana LLM에 전달할 RAG(Retrieval-Augmented Generation) 스타일의 프롬프트를 구성합니다.
         full_text는 MAX_TEXT_LENGTH에 맞게 잘라서 사용합니다.
         """
+
         # 1. DB에서 논문 정보 및 텍스트 가져오기 (paper_metadata.full_text 조회)
         full_text = self._get_paper_full_text(db, paper_id)
         
         if not full_text:
-            return "현재 이 논문의 full text가 등록되어 있지 않아 답변을 생성할 수 없습니다."
+            return ChatHistory(
+                user_id=user_id,
+                paper_id=paper_id,
+                question=question,
+                answer="현재 이 논문의 full text가 등록되어 있지 않아 답변을 생성할 수 없습니다."
+            )
         
         # 2. Kanana에 전달할 프롬프트 구성
         MAX_TEXT_LENGTH = 5000 
@@ -58,17 +82,25 @@ class ChatbotAgent:
         if len(full_text) > MAX_TEXT_LENGTH:
             text_preview += "..."
         
+        history_text = self._format_history_for_prompt(relevant_history or [])
+        
         prompt = f"""
-        당신은 아래 주어진 '논문 내용'을 기반으로 '사용자의 질문'에 답해야 하는 논문 분석 AI입니다.
-        **외부 정보는 절대 사용하지 마세요.** 오직 주어진 논문 내용만으로 답변을 생성해야 합니다.
+        당신은 아래 주어진 '논문 내용'과 '이전 대화'를 기반으로 '사용자의 새 질문'에 답해야 하는 논문 분석 AI입니다.
+        **외부 정보는 절대 사용하지 마세요.** 오직 주어진 논문 내용과 대화 맥락만으로 답변을 생성해야 합니다.
 
         --- 논문 내용 (Paper full text) ---
         {text_preview}
         ----------------------------------
 
-        사용자의 질문: {question}
+        --- 이전 대화 (Context) ---
+        {history_text}
+        ----------------------------------
 
-        위 논문 텍스트를 참조하여 질문에 친절하고 정확하게 답변해주세요.
+        --- 새 질문 ---
+        {question}
+        ----------------------------------
+
+        위 논문 텍스트와 이전 대화 내용을 참조하여 질문에 친절하고 정확하게 답변해주세요.
         """
     
         # 3. Kanana 함수 호출 (동기 함수 call_kanana 호출)
@@ -90,6 +122,8 @@ class ChatbotAgent:
             )
             db.add(new_chat)
             db.commit()
+            db.refresh(new_chat)
+            return new_chat
         except Exception as e:
             logger.error(f"ChatHistory 저장 중 DB 오류 발생: User {user_id}, Paper {paper_id}, Error: {e}", exc_info=True)
             db.rollback()
