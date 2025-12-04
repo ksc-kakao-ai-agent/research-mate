@@ -76,12 +76,7 @@ class ChatbotAgent:
             )
         
         # 2. Kanana에 전달할 프롬프트 구성
-        MAX_TEXT_LENGTH = 5000 
-
-        text_preview = full_text[:MAX_TEXT_LENGTH]
-        if len(full_text) > MAX_TEXT_LENGTH:
-            text_preview += "..."
-        
+        text_preview = full_text
         history_text = self._format_history_for_prompt(relevant_history or [])
         
         prompt = f"""
