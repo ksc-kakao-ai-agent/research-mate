@@ -82,6 +82,9 @@ class PaperDescriptionAgent:
         )
         level_label = self.level_labels.get(level, "중급자")
         
+        # f-string 안에서 백슬래시 사용 불가하므로 변수로 분리
+        content_text = f'논문 전문 (일부):\n{content}' if full_text else ''
+        
         prompt = f"""{level_prompt}
 
 논문 제목: {title}
@@ -89,7 +92,7 @@ class PaperDescriptionAgent:
 원문 초록:
 {abstract}
 
-{f'논문 전문 (일부):\n{content}' if full_text else ''}
+{content_text}
 
 위 논문에 대한 {level_label} 수준의 요약을 작성해주세요."""
         
