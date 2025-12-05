@@ -35,6 +35,12 @@ Thumbs.db
 # pytest
 .pytest_cache/
 
+#Front
+node_modules/
+frontend/node_modules/
+
+
 # FastAPI
 .mypy_cache/
 .gitignore
+
