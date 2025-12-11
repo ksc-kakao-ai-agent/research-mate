@@ -6,12 +6,18 @@ from typing import List, Literal
 from datetime import datetime, date, timedelta
 import json
 
+from app.utils.kanana import call_kanana
+from starlette.concurrency import run_in_threadpool
+import logging
+
+
 from app.database import get_db
 from app.models import Paper, Recommendation, CitationGraph
 from app.agents.relation_analysis_agent import RelationAnalysisAgent
 
 router = APIRouter(tags=["recommendations"])
 
+logger = logging.getLogger(__name__)
 
 # ==================== Request/Response 모델 ====================
 
@@ -232,6 +238,8 @@ async def get_today_recommendations_relations(user_id: int, db: Session = Depend
             recommended_paper_ids.append(paper_id)
     
     # DB의 CitationGraph에서 공통 인용 논문 찾기
+    common_references = []  # 여기서 초기화
+    
     if len(recommended_paper_ids) >= 2:
         # 각 추천 논문이 인용하는 논문들 찾기
         citations = db.query(CitationGraph).filter(
@@ -292,8 +300,12 @@ async def get_today_recommendations_relations(user_id: int, db: Session = Depend
                     })
         
         # 공통 참고문헌 정보 생성
-        common_references = []
-        for ref_info in common_reference_papers:
+        if len(common_reference_papers) == 0:
+            # 공통 인용 논문이 없는 경우 - 빈 리스트 유지
+            pass
+        elif len(common_reference_papers) == 1:
+            # 공통 인용 논문이 1개인 경우 - 바로 추가
+            ref_info = common_reference_papers[0]
             paper = ref_info["paper"]
             cited_count = ref_info["cited_by_count"]
             suggestion = f"오늘 추천된 논문 {cited_count}편이 모두 이 논문을 인용하고 있습니다. 내일 추천해드릴까요?"
@@ -304,8 +316,90 @@ async def get_today_recommendations_relations(user_id: int, db: Session = Depend
                 cited_by_count=cited_count,
                 suggestion=suggestion
             ))
-    else:
-        common_references = []
+        else:
+            # 공통 인용 논문이 여러 개인 경우 - Kanana로 하나 선택
+            try:
+                # 오늘 추천된 논문 제목 리스트
+                recommended_titles = [p.get("title", "") for p in papers_for_analysis]
+                
+                # 공통 인용 논문 제목 리스트
+                common_ref_titles = [ref_info["paper"].title for ref_info in common_reference_papers]
+                
+                # Kanana 프롬프트 생성
+                prompt = f"""오늘 추천된 논문 3개와 이들이 공통으로 인용하는 논문들이 있습니다.
+사용자에게 다음으로 추천할 논문을 공통 인용 논문 중에서 1개만 선택해주세요.
+
+**오늘 추천된 논문:**
+{chr(10).join(f"{i+1}. {title}" for i, title in enumerate(recommended_titles))}
+
+**공통으로 인용하는 논문들:**
+{chr(10).join(f"{i+1}. {title}" for i, title in enumerate(common_ref_titles))}
+
+위 3개의 추천 논문과 관계가 가장 깊다고 판단되는 공통 인용 논문 1개를 선택하고, 그 이유를 간단히 설명해주세요.
+
+응답 형식은 반드시 다음과 같이 해주세요:
+선택된 논문 번호: [번호]
+이유: [한 문장으로 간단히]"""
+
+                # Kanana 호출 (비동기)
+                response_text = await run_in_threadpool(call_kanana, prompt)
+                
+                if not response_text:
+                    raise Exception("Kanana에서 응답을 받지 못했습니다.")
+                
+                # 응답 파싱
+                selected_index = None
+                for line in response_text.split('\n'):
+                    if '선택된 논문 번호' in line or '선택' in line:
+                        # 숫자 추출
+                        import re
+                        numbers = re.findall(r'\d+', line)
+                        if numbers:
+                            selected_index = int(numbers[0]) - 1  # 0-based index
+                            break
+                
+                # 선택된 논문 추가
+                if selected_index is not None and 0 <= selected_index < len(common_reference_papers):
+                    ref_info = common_reference_papers[selected_index]
+                    paper = ref_info["paper"]
+                    cited_count = ref_info["cited_by_count"]
+                    suggestion = f"오늘 추천된 논문 {cited_count}편이 모두 이 논문을 인용하고 있습니다. 내일 추천해드릴까요?"
+                    
+                    common_references.append(CommonReference(
+                        paper_id=paper.paper_id,
+                        title=paper.title,
+                        cited_by_count=cited_count,
+                        suggestion=suggestion
+                    ))
+                else:
+                    # 파싱 실패 시 첫 번째 논문 선택
+                    logger.warning(f"Kanana 응답 파싱 실패. 첫 번째 논문 선택. 응답: {response_text}")
+                    ref_info = common_reference_papers[0]
+                    paper = ref_info["paper"]
+                    cited_count = ref_info["cited_by_count"]
+                    suggestion = f"오늘 추천된 논문 {cited_count}편이 모두 이 논문을 인용하고 있습니다. 내일 추천해드릴까요?"
+                    
+                    common_references.append(CommonReference(
+                        paper_id=paper.paper_id,
+                        title=paper.title,
+                        cited_by_count=cited_count,
+                        suggestion=suggestion
+                    ))
+                    
+            except Exception as e:
+                # Kanana 호출 실패 시 첫 번째 논문 선택
+                logger.error(f"Kanana를 이용한 논문 선택 실패: {e}", exc_info=True)
+                ref_info = common_reference_papers[0]
+                paper = ref_info["paper"]
+                cited_count = ref_info["cited_by_count"]
+                suggestion = f"오늘 추천된 논문 {cited_count}편이 모두 이 논문을 인용하고 있습니다. 내일 추천해드릴까요?"
+                
+                common_references.append(CommonReference(
+                    paper_id=paper.paper_id,
+                    title=paper.title,
+                    cited_by_count=cited_count,
+                    suggestion=suggestion
+                ))
     
     # 클러스터 생성 (간단한 구현: 제목 키워드 기반)
     clusters = []
@@ -350,8 +444,24 @@ async def request_paper(user_id: int, request: RequestPaperRequest, db: Session 
     # 내일 날짜 계산
     tomorrow = date.today() + timedelta(days=1)
     tomorrow_datetime = datetime.combine(tomorrow, datetime.min.time())
-    
-    # 내일 날짜로 추천 논문 생성
+
+    # 내일 날짜로 이미 추천 요청한 논문이 있는지 확인
+    existing = db.query(Recommendation).filter(
+        Recommendation.user_id == user_id,
+        Recommendation.paper_id == request.paper_id,
+        Recommendation.recommended_at == tomorrow_datetime
+    ).first()
+
+    if existing:
+        # 이미 추천된 논문일 경우 DB 변경 없이 안내 메시지 반환
+        return RequestPaperResponse(
+            message="이미 추천받기로 한 논문입니다.",
+            paper_id=paper.paper_id,
+            title=paper.title,
+            scheduled_date=tomorrow.strftime("%Y-%m-%d")
+        )
+
+    # 중복이 아니면 새 추천 생성
     new_recommendation = Recommendation(
         user_id=user_id,
         paper_id=request.paper_id,
@@ -370,4 +480,3 @@ async def request_paper(user_id: int, request: RequestPaperRequest, db: Session 
         title=paper.title,
         scheduled_date=tomorrow.strftime("%Y-%m-%d")
     )
-
