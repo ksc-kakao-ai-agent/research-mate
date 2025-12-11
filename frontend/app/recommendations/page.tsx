@@ -9,27 +9,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar } from "lucide-react"
-import { PaperGraph } from "@/components/paper-graph"
+import PaperGraph from "@/components/paper-graph"
+
+interface RelationsData {
+  date: string
+  graph: {
+    nodes: Array<{
+      id: number
+      title: string
+      type: "recommended" | "common_reference"
+    }>
+    edges: Array<{
+      source: number
+      target: number
+      type: "cites"
+      is_influential: boolean
+    }>
+  }
+  analysis: {
+    common_references: Array<{
+      paper_id: number
+      title: string
+      cited_by_count: number
+      suggestion: string
+    }>
+    clusters: Array<{
+      theme: string
+      papers: number[]
+    }>
+  }
+}
 
 export default function RecommendationsPage() {
   const { user } = useAuth()
   const router = useRouter()
-  const [papers, setPapers] = useState<
-    Array<{
+  const [papers, setPapers] = useState<Array<{
       paper_id: number
       title: string
       authors: string[]
       recommended_at: string
-    }>
-  >([])
+    }>>([])
+  const [relationsData, setRelationsData] = useState<RelationsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingRelations, setIsLoadingRelations] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isRequesting, setIsRequesting] = useState(false)
 
   useEffect(() => {
     if (!user) {
       router.push("/login")
     } else {
       fetchRecommendations()
+      fetchRelations()
     }
   }, [user, router])
 
@@ -50,23 +81,48 @@ export default function RecommendationsPage() {
     }
   }
 
-  const handleRequestPaper = async () => {
+  const fetchRelations = async () => {
     if (!user) return
 
+    setIsLoadingRelations(true)
+
     try {
-      await api.requestPaper(user.id, 50, "common_reference")
-      alert("내일 논문 추천 목록에 추가되었습니다.")
+      const data = await api.getTodayRecommendationsRelations(user.id)
+      setRelationsData(data)
+    } catch (error) {
+      console.error("Failed to fetch relations:", error)
+      // 관계 데이터 로딩 실패는 무시 (선택적 기능)
+      setRelationsData(null)
+    } finally {
+      setIsLoadingRelations(false)
+    }
+  }
+
+  const handleRequestPaper = async () => {
+    if (!user || !relationsData || relationsData.analysis.common_references.length === 0) return
+
+    setIsRequesting(true)
+
+    try {
+      const commonRef = relationsData.analysis.common_references[0]
+      const response = await api.requestPaper(user.id, commonRef.paper_id, "common_reference")
+      // 백엔드 메시지를 그대로 alert로 보여주기
+      alert(response.message)
     } catch (error) {
       console.error("Failed to request paper:", error)
       alert("논문 요청에 실패했습니다.")
+    } finally {
+      setIsRequesting(false)
     }
   }
+
 
   if (!user) {
     return null
   }
 
   const todayPapers = papers.slice(0, 3)
+  const hasCommonReferences = relationsData && relationsData.analysis.common_references.length > 0
 
   return (
     <div className="min-h-screen bg-background">
@@ -135,15 +191,38 @@ export default function RecommendationsPage() {
                 <CardDescription className="text-base">오늘 추천된 논문들 간의 연관성을 확인하세요</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="p-4 bg-card rounded-lg border border-border">
-                  <p className="text-sm leading-relaxed mb-4">
-                    논문 A와 B가 공통으로 인용하는 논문 D가 있네요. 내일은 D를 추천해드릴까요?
-                  </p>
-                  <PaperGraph />
-                </div>
-                <Button className="w-full" size="lg" onClick={handleRequestPaper}>
-                  내일 해당 논문 추천받기
-                </Button>
+                {isLoadingRelations ? (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground">관계를 분석하는 중...</p>
+                  </div>
+                ) : hasCommonReferences ? (
+                  <>
+                    <div className="p-4 bg-card rounded-lg border border-border">
+                      <p className="text-sm leading-relaxed mb-4">
+                        {relationsData.analysis.common_references[0].suggestion}
+                      </p>
+                      <PaperGraph 
+                        nodes={relationsData.graph.nodes}
+                        edges={relationsData.graph.edges}
+                      />
+                    </div>
+                    <Button 
+                      className="w-full" 
+                      size="lg" 
+                      onClick={handleRequestPaper}
+                      disabled={isRequesting}
+                    >
+                      {isRequesting ? "요청 중..." : "내일 해당 논문 추천받기"}
+                    </Button>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground">
+                      오늘은 세 논문 사이에 관계가 존재하지 않네요.<br />
+                      내일은 흥미로운 관계를 발견할 수 있을지도 몰라요!
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </>
