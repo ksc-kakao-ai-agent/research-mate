@@ -18,7 +18,7 @@ export default function MyPage() {
   const { user, logout, updateProfile } = useAuth()
   const router = useRouter()
   
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+  const [interestInput, setInterestInput] = useState('')
   const [difficulty, setDifficulty] = useState('')
   const [hasChanges, setHasChanges] = useState(false)
 
@@ -26,40 +26,40 @@ export default function MyPage() {
     if (!user) {
       router.push('/login')
     } else {
-      setSelectedInterests(user.interests)
-      setDifficulty(user.difficulty)
+      setInterestInput(user.interest)
+      setDifficulty(user.level)
     }
   }, [user, router])
 
   useEffect(() => {
     if (user) {
-      const interestsChanged = JSON.stringify(selectedInterests.sort()) !== JSON.stringify(user.interests.sort())
-      const difficultyChanged = difficulty !== user.difficulty
-      setHasChanges(interestsChanged || difficultyChanged)
+      const interestChanged = interestInput !== user.interest
+      const difficultyChanged = difficulty !== user.level
+      setHasChanges(interestChanged || difficultyChanged)
     }
-  }, [selectedInterests, difficulty, user])
+  }, [interestInput, difficulty, user])
 
   if (!user) {
     return null
   }
 
-  const handleInterestToggle = (interest: string) => {
-    setSelectedInterests(prev =>
-      prev.includes(interest)
-        ? prev.filter(i => i !== interest)
-        : [...prev, interest]
-    )
+
+
+  const handleSave = async () => {
+  if (!interestInput) {
+    alert('관심 분야를 입력해주세요.')
+    return
   }
 
-  const handleSave = () => {
-    if (selectedInterests.length === 0) {
-      alert('최소 하나의 관심 분야를 선택해주세요.')
-      return
-    }
-    updateProfile(selectedInterests, difficulty)
-    setHasChanges(false)
+  try {
+    await updateProfile(interestInput, difficulty)  // AuthProvider에서 정의된 함수 호출
     alert('프로필이 성공적으로 업데이트되었습니다.')
+    setHasChanges(false)
+  } catch (err) {
+    console.error(err)
+    alert('프로필 업데이트 중 오류가 발생했습니다.')
   }
+}
 
   const handleLogout = () => {
     logout()
@@ -119,23 +119,13 @@ export default function MyPage() {
             <CardContent className="space-y-6">
               <div className="space-y-3">
                 <Label className="text-base font-semibold">논문 관심 분야</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  {interests.map((interest) => (
-                    <div key={interest} className="flex items-center space-x-3">
-                      <Checkbox
-                        id={`mypage-${interest}`}
-                        checked={selectedInterests.includes(interest)}
-                        onCheckedChange={() => handleInterestToggle(interest)}
-                      />
-                      <Label 
-                        htmlFor={`mypage-${interest}`} 
-                        className="cursor-pointer font-normal text-sm"
-                      >
-                        {interest}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
+                  <input
+                    type="text"
+                    placeholder="관심 분야를 입력하세요"
+                    value={interestInput}
+                    onChange={(e) => setInterestInput(e.target.value)}
+                    className="w-full rounded-md border p-2"
+                  />
               </div>
 
               <Separator />
