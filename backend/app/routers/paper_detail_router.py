@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, and_
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 import json
+from app.models import UserReadPaper
+
 
 from app.database import get_db
 from app.models import Paper, PaperMetadata, Recommendation, ChatHistory
@@ -86,12 +88,18 @@ def format_date(date_obj: Optional[datetime]) -> Optional[str]:
 @router.get("/{user_id}/papers/history", response_model=PaperHistoryResponse, status_code=status.HTTP_200_OK)
 async def get_paper_history(user_id: int, db: Session = Depends(get_db)):
     """
-    전체 논문 목록 조회
+    오늘까지 추천된 논문 목록 조회
     정렬: recommended_at 내림차순 (최신순)
     """
-    # 사용자의 추천 논문 목록 조회 (recommended_at 내림차순)
+    today = date.today()
+    today_end = datetime.combine(today, datetime.max.time())
+
+    # 오늘까지 추천된 논문만 조회
     recommendations = db.query(Recommendation).filter(
-        Recommendation.user_id == user_id
+        and_(
+            Recommendation.user_id == user_id,
+            Recommendation.recommended_at <= today_end
+        )
     ).order_by(desc(Recommendation.recommended_at)).all()
     
     papers_list = []
@@ -100,10 +108,7 @@ async def get_paper_history(user_id: int, db: Session = Depends(get_db)):
         if not paper:
             continue
         
-        # authors 파싱
         authors = parse_json_field(paper.authors)
-        
-        # recommended_at을 YYYY-MM-DD 형식으로 변환
         recommended_at_str = format_date(rec.recommended_at)
         if not recommended_at_str:
             continue
@@ -133,6 +138,24 @@ async def get_paper_detail(paper_id: int, user_id: int, db: Session = Depends(ge
             status_code=status.HTTP_404_NOT_FOUND,
             detail="논문을 찾을 수 없습니다."
         )
+
+    # ----------------------------
+    # 1. UserReadPaper 자동 기록
+    # ----------------------------
+    read_exists = db.query(UserReadPaper).filter(
+        UserReadPaper.user_id == user_id,
+        UserReadPaper.paper_id == paper_id
+    ).first()
+
+    if not read_exists:
+        new_read = UserReadPaper(
+            user_id=user_id,
+            paper_id=paper_id,
+            read_at=datetime.utcnow()
+        )
+        db.add(new_read)
+        db.commit()
+        db.refresh(new_read)
     
     # 논문 메타데이터 조회
     metadata = db.query(PaperMetadata).filter(PaperMetadata.paper_id == paper_id).first()
