@@ -99,6 +99,37 @@ class ApiClient {
       total_count: number
     }>(`/${userId}/recommendations/today`)
   }
+  
+  async getTodayRecommendationsRelations(userId: number) {
+  return this.request<{
+    date: string
+    graph: {
+      nodes: Array<{
+        id: number
+        title: string
+        type: "recommended" | "common_reference"
+      }>
+      edges: Array<{
+        source: number
+        target: number
+        type: "cites"
+        is_influential: boolean
+      }>
+    }
+    analysis: {
+      common_references: Array<{
+        paper_id: number
+        title: string
+        cited_by_count: number
+        suggestion: string
+      }>
+      clusters: Array<{
+        theme: string
+        papers: number[]
+      }>
+    }
+  }>(`/${userId}/recommendations/today/relations`)
+}
 
   async requestPaper(userId: number, paperId: number, reason: string) {
     return this.request<{
@@ -153,6 +184,22 @@ class ApiClient {
     }>(`/papers/${paperId}/${userId}`)
   }
 
+  async updateProfile(userId: number, data: { interest: string; level: string }) {
+    return this.request<{
+      message: string
+      user: {
+        user_id: number
+        username: string
+        interest: string
+        level: string
+      }
+    }>(`/users/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
+  }
+
+
   async chatWithPaper(paperId: number, userId: number, question: string) {
     return this.request<{
       chat_id: number
@@ -172,5 +219,8 @@ class ApiClient {
     })
   }
 }
+
+
+
 
 export const api = new ApiClient()
