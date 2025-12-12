@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
-from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 from app.models import UserReadPaper
+from app.playmcp_client import playmcp_client
 
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import Paper, PaperMetadata, Recommendation, ChatHistory
@@ -212,3 +213,152 @@ async def get_paper_detail(paper_id: int, user_id: int, db: Session = Depends(ge
         chat_history=chat_history_list
     )
 
+# ==================== 카카오톡 공유 ====================
+
+# KakaoShareRequest 모델 수정
+class KakaoShareRequest(BaseModel):
+    paper_title: str
+    pdf_url: Optional[str] = None
+    ai_summary: Optional[str] = None
+
+
+@router.post("/papers/{paper_id}/share-kakao", status_code=status.HTTP_200_OK)
+async def share_paper_to_kakao(
+    paper_id: int,
+    request: KakaoShareRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    논문 정보를 카카오톡 나와의 채팅방에 공유
+    """
+    try:
+        # 논문이 존재하는지 확인
+        paper = db.query(Paper).filter(Paper.paper_id == paper_id).first()
+        if not paper:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="논문을 찾을 수 없습니다."
+            )
+        
+        # 카카오톡 메시지 구성 (포맷팅)
+        message_parts = [
+            "📚 Research Mate에서 추천한 논문을 공유해요!",
+            "",
+            "📄 논문 제목",
+            f"{request.paper_title}",
+            ""
+        ]
+        
+        # PDF URL 추가
+        if request.pdf_url:
+            message_parts.extend([
+                "🔗 PDF 다운로드",
+                f"{request.pdf_url}",
+                ""
+            ])
+        
+        # AI 설명 추가
+        if request.ai_summary:
+            message_parts.extend([
+                "🤖 AI가 설명하는 이 논문",
+                f"{request.ai_summary}"
+            ])
+        
+        message = "\n".join(message_parts)
+        
+        # 200자 초과 시 AI 설명 제거하고 안내 메시지로 대체
+        if len(message) > 200:
+            message_parts_without_ai = [
+                "📚 Research Mate에서 추천한 논문을 공유해요!",
+                "",
+                "📄 논문 제목",
+                f"{request.paper_title}",
+                ""
+            ]
+            
+            if request.pdf_url:
+                message_parts_without_ai.extend([
+                    "🔗 PDF 다운로드",
+                    f"{request.pdf_url}",
+                    ""
+                ])
+            
+            message_parts_without_ai.extend([
+                "💡 이 논문에 대한 AI 맞춤 설명은 Research Mate에서 확인해보세요!"
+            ])
+            
+            message = "\n".join(message_parts_without_ai)
+        
+        # PlayMCP를 통해 카카오톡 전송
+        result = await playmcp_client.send_kakao_message(message)
+        
+        return {
+            "success": True,
+            "message": "카카오톡으로 공유되었습니다.",
+            "result": result
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"카카오톡 공유 중 오류가 발생했습니다: {str(e)}"
+        )
+
+class CalendarEventRequest(BaseModel):
+    event_date: str  # YYYY-MM-DD 형식
+
+
+@router.post("/add-to-calendar", status_code=status.HTTP_200_OK)
+async def add_to_calendar(request: CalendarEventRequest):
+    """
+    내일 Research Mate 사용 알림 일정을 톡캘린더에 추가
+    """
+    try:
+        from datetime import datetime, timedelta # 이 두 가지를 추가해야 합니다.
+        
+        # 고정된 제목/설명
+        title = "Research Mate에서 오늘의 추천 논문 확인하기"
+        description = "오늘도 화이팅!"
+        
+        # 날짜/시간 포맷 변환 (하루종일 고정)
+        event_date = request.event_date # YYYY-MM-DD
+        
+        # 1. start_date 설정
+        start_date = datetime.strptime(event_date, "%Y-%m-%d").date()
+        
+        # 2. end_date는 시작일 다음 날 (하루 종일 일정의 표준)
+        end_date = start_date + timedelta(days=1)
+        
+        # 3. PlayMCP 형식 (T00:00:00)으로 변환
+        start_at = f"{start_date.strftime('%Y-%m-%d')}T00:00:00"
+        end_at = f"{end_date.strftime('%Y-%m-%d')}T00:00:00" # <--- 이 부분이 핵심 수정
+        
+        # 고정된 알림 설정 (30분 전, 1일 전)
+        reminders = [30, 1440]
+        
+        # PlayMCP를 통해 톡캘린더에 일정 생성
+        result = await playmcp_client.create_calendar_event(
+            title=title,
+            start_at=start_at,
+            end_at=end_at, # 수정된 end_at 사용
+            all_day=True,
+            description=description,
+            reminders=reminders
+        )
+        
+        return {
+            "success": True,
+            "message": "톡캘린더에 일정이 추가되었습니다.",
+            "result": result,
+            "event_summary": {
+                "title": title,
+                "date": event_date,
+                "time": "하루종일"
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"톡캘린더 일정 추가 중 오류가 발생했습니다: {str(e)}"
+        )

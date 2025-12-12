@@ -10,12 +10,15 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, MessageSquare, Calendar, Sparkles, ExternalLink } from "lucide-react"
+import { Share2 } from "lucide-react"
 
 export default function PaperDetailPage() {
   const { user } = useAuth()
   const router = useRouter()
   const params = useParams()
   const paperId = Number.parseInt(params.id as string)
+  const [isSharing, setIsSharing] = useState(false)
+
 
   const [paper, setPaper] = useState<{
     paper_id: number
@@ -71,6 +74,28 @@ export default function PaperDetailPage() {
     }
   }
 
+  // 카카오톡 공유 핸들러 추가 (fetchPaperDetail 함수 아래에)
+  const handleShareToKakao = async () => {
+    if (!paper) return
+  
+    setIsSharing(true)
+    try {
+      await api.sharePaperToKakao(
+        paperId,
+        paper.title,
+        paper.pdf_url,
+        paper.summary?.content || null
+      )
+      alert("카카오톡으로 공유되었습니다! 📱")
+    } catch (error) {
+      console.error("Failed to share to Kakao:", error)
+      alert("카카오톡 공유에 실패했습니다.")
+    } finally {
+      setIsSharing(false)
+    }
+  }
+  
+
   if (!user) {
     return null
   }
@@ -115,9 +140,20 @@ export default function PaperDetailPage() {
             뒤로 가기
           </Button>
 
-          <Button onClick={() => router.push(`/paper/${paperId}/chat`)} size="lg">
-            <MessageSquare className="h-4 w-4 mr-2" />이 논문에 대해 챗봇에게 질문하기
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleShareToKakao}
+              disabled={isSharing}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+                {isSharing ? "공유 중..." : "카카오톡 공유"}
+            </Button>
+
+            <Button onClick={() => router.push(`/paper/${paperId}/chat`)} size="lg">
+              <MessageSquare className="h-4 w-4 mr-2" />이 논문에 대해 챗봇에게 질문하기
+            </Button>
+          </div>
         </div>
 
         {/* Paper Header */}

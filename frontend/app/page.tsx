@@ -8,6 +8,7 @@ import { NavigationHeader } from "@/components/navigation-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { BookOpen, History, Lightbulb } from "lucide-react"
+import { Calendar } from "lucide-react"
 
 export default function HomePage() {
   const { user, updateInterest, updateLevel } = useAuth()
@@ -23,6 +24,7 @@ export default function HomePage() {
   } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isAddingToCalendar, setIsAddingToCalendar] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -46,6 +48,27 @@ export default function HomePage() {
       setError("조언을 불러오는데 실패했습니다.")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleAddToCalendar = async () => {
+    setIsAddingToCalendar(true)
+    try {
+      // 내일 날짜 계산
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const dateString = tomorrow.toISOString().split('T')[0] // YYYY-MM-DD
+      
+      const response = await api.addToCalendar({
+        event_date: dateString
+      })
+      
+      alert(`톡캘린더에 일정이 추가되었습니다! 📅\n${response.event_summary.title}\n${response.event_summary.date}`)
+    } catch (error) {
+      console.error("Failed to add to calendar:", error)
+      alert("톡캘린더 일정 추가에 실패했습니다.")
+    } finally {
+      setIsAddingToCalendar(false)
     }
   }
 
@@ -86,6 +109,19 @@ export default function HomePage() {
       <NavigationHeader />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* 톡캘린더 버튼 - 오른쪽 상단 */}
+        <div className="flex justify-end mb-6">
+          <Button 
+            variant="outline" 
+            onClick={handleAddToCalendar}
+            disabled={isAddingToCalendar}
+            className="gap-2"
+          >
+            <Calendar className="h-4 w-4" />
+            {isAddingToCalendar ? "추가 중..." : "내일도 Research Mate와 공부하는 일정 톡캘린더에 추가하기 ♡"}
+          </Button>
+        </div>
+
         {/* Advice Box */}
         {isLoading && (
           <Card className="mb-8">
