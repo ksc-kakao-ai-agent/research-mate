@@ -9,10 +9,17 @@ export function NavigationHeader() {
   const { user } = useAuth()
   const router = useRouter()
 
+  const handleLogoClick = () => {
+    router.push('/')
+  }
+
   return (
     <header className="border-b border-border bg-card">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div 
+          onClick={handleLogoClick}
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+        >
           <BookOpen className="h-6 w-6 text-primary" />
           <h1 className="text-xl font-bold">Research Paper Hub</h1>
         </div>

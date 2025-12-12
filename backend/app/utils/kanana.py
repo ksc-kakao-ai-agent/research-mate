@@ -7,7 +7,7 @@ load_dotenv()
 API_KEY = os.getenv("KANANA_API_KEY", "")
 
 client = OpenAI(
-    base_url="https://kanana-2-30b-a3b-s7nyu.a2s-endpoint.kr-central-2.kakaocloud.com/openai/v1",
+    base_url="https://kanana-2-30b-a3b-s7nyu.a2s-endpoint.kr-central-2.kakaocloud.com/v1",
     api_key=API_KEY
 )
 
