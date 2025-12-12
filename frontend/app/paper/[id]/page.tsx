@@ -110,7 +110,7 @@ export default function PaperDetailPage() {
 
       <main className="container mx-auto px-4 py-8 max-w-5xl">
         <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => router.back()}>
+          <Button variant="ghost" onClick={() => router.push("/")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             뒤로 가기
           </Button>
@@ -123,24 +123,42 @@ export default function PaperDetailPage() {
         {/* Paper Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            {paper.metadata.keywords.map((keyword) => (
-              <Badge key={keyword} variant="secondary" className="text-sm">
-                {keyword}
+
+            {/* 🔥 keywords가 null/undefined일 때 오류 안 나게 처리 */}
+            {paper.metadata?.keywords?.length > 0 &&
+              paper.metadata.keywords.map((keyword) => (
+                <Badge key={keyword} variant="secondary" className="text-sm">
+                  {keyword}
+                </Badge>
+              ))
+            }
+
+            {paper.summary?.level && (
+              <Badge variant="outline" className="text-sm">
+                {paper.summary.level === "beginner"
+                  ? "초급"
+                  : paper.summary.level === "intermediate"
+                  ? "중급"
+                  : "고급"}
               </Badge>
-            ))}
-            <Badge variant="outline" className="text-sm">
-              {paper.summary.level === "beginner" ? "초급" : paper.summary.level === "intermediate" ? "중급" : "고급"}
-            </Badge>
+            )}
+
+
             <span className="text-sm text-muted-foreground flex items-center gap-1">
               <Calendar className="h-4 w-4" />
               {new Date(paper.published_date).toLocaleDateString("ko-KR")}
             </span>
           </div>
-          <h1 className="text-4xl font-bold mb-4 text-balance leading-tight">{paper.title}</h1>
+
+          <h1 className="text-4xl font-bold mb-4 text-balance leading-tight">
+            {paper.title}
+          </h1>
+
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <span>{paper.authors.join(", ")}</span>
             <span>•</span>
             <span>{paper.source}</span>
+
             {paper.arxiv_id && (
               <>
                 <span>•</span>
@@ -148,6 +166,7 @@ export default function PaperDetailPage() {
               </>
             )}
           </div>
+
           {paper.pdf_url && (
             <Button variant="outline" asChild>
               <a href={paper.pdf_url} target="_blank" rel="noopener noreferrer">
@@ -157,6 +176,7 @@ export default function PaperDetailPage() {
             </Button>
           )}
         </div>
+
 
         <div className="space-y-6">
           {/* Metadata */}
@@ -202,7 +222,7 @@ export default function PaperDetailPage() {
               <CardDescription>쉽게 이해할 수 있도록 AI가 요약했습니다</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-base leading-relaxed">{paper.summary.content}</p>
+              <p className="text-base leading-relaxed">{paper.summary?.content || "요약 정보가 제공되지 않았습니다."}</p>
             </CardContent>
           </Card>
 

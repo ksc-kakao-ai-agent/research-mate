@@ -18,6 +18,9 @@ interface AuthContextType {
   logout: () => void
   updateInterest: (interest: string) => void
   updateLevel: (level: string) => void
+
+  /** 🔥 새로 추가 */
+  updateProfile: (interest: string, level: string) => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -97,8 +100,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  /** 🔥 서버로 PUT 요청 보내는 updateProfile 추가 */
+  const updateProfile = async (interest: string, level: string) => {
+  if (!user) return false
+
+  try {
+    // user.id와 데이터 객체를 전달
+    const response = await api.updateProfile(user.id, { interest, level })
+
+    // 업데이트된 user 반영
+    const updatedUser: User = {
+      id: user.id,
+      username: user.username,
+      interest,
+      level,
+    }
+
+    setUser(updatedUser)
+    localStorage.setItem("user", JSON.stringify(updatedUser))
+
+    return true
+  } catch (error) {
+    console.error("Profile update failed:", error)
+    alert(error instanceof Error ? error.message : "프로필 업데이트에 실패했습니다.")
+    return false
+  }
+}
+
+
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, updateInterest, updateLevel }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        signup,
+        logout,
+        updateInterest,
+        updateLevel,
+        updateProfile, // 🔥 반드시 Context에 추가해야 사용 가능
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
