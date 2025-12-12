@@ -146,11 +146,25 @@ class AdviceAgent:
             # Kanana 호출
             interest_advice_raw = call_kanana(interest_prompt)
             
+            # 💡 로그 추가: Kanana 원시 응답 확인
+            print(f"--- Kanana (관심 분야) 원시 응답 시작 ---")
+            print(interest_advice_raw)
+            print(f"--- Kanana (관심 분야) 원시 응답 끝 ---")
+
             # JSON 파싱
-            match = re.search(r"\{.*\}", interest_advice_raw, re.DOTALL)
+            match = re.search(r"(\{.*?\}|\`\`\`json\s*(\{.*?\})\s*\`\`\`)", interest_advice_raw, re.DOTALL)
+
             if match:
-                interest_advice = json.loads(match.group(0))
+                # 캡처 그룹 2 (마크다운 내부 JSON)가 있으면 사용, 없으면 캡처 그룹 1 (일반 JSON) 사용
+                json_string = match.group(2) if match.group(2) else match.group(1) 
+    
+                try:
+                    interest_advice = json.loads(json_string)
+                except json.JSONDecodeError as json_e:
+                    # JSON 포맷은 찾았지만, 내부 구조가 깨진 경우
+                    raise ValueError(f"찾은 문자열은 JSON이 아니거나 형식이 올바르지 않습니다: {json_e}")
             else:
+                # JSON 객체나 마크다운 블록 자체를 찾지 못한 경우
                 raise ValueError("LLM 응답에서 JSON을 찾을 수 없습니다.")
 
             # LLM이 interest_change를 반환했을 경우, 후처리 로직 실행 (안전 장치)
@@ -218,12 +232,26 @@ class AdviceAgent:
             try:
                 # Kanana 호출
                 level_advice_raw = call_kanana(level_prompt)
+
+                # 💡 로그 추가: Kanana 원시 응답 확인
+                print(f"--- Kanana (난이도) 원시 응답 시작 ---")
+                print(level_advice_raw)
+                print(f"--- Kanana (난이도) 원시 응답 끝 ---")
                 
                 # JSON 파싱
-                match = re.search(r"\{.*\}", level_advice_raw, re.DOTALL)
+                match = re.search(r"(\{.*?\}|\`\`\`json\s*(\{.*?\})\s*\`\`\`)", level_advice_raw, re.DOTALL)
+
                 if match:
-                    level_advice = json.loads(match.group(0))
+                    # 캡처 그룹 2 (마크다운 내부 JSON)가 있으면 사용, 없으면 캡처 그룹 1 (일반 JSON) 사용
+                    json_string = match.group(2) if match.group(2) else match.group(1) 
+    
+                    try:
+                        level_advice = json.loads(json_string)
+                    except json.JSONDecodeError as json_e:
+                        # JSON 포맷은 찾았지만, 내부 구조가 깨진 경우
+                        raise ValueError(f"찾은 문자열은 JSON이 아니거나 형식이 올바르지 않습니다: {json_e}")
                 else:
+                    # JSON 객체나 마크다운 블록 자체를 찾지 못한 경우
                     raise ValueError("LLM 응답에서 JSON을 찾을 수 없습니다.")
 
                 # 난이도 변경 제안이 있을 경우 즉시 반환 (워크플로우 흐름)
