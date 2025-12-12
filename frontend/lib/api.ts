@@ -7,6 +7,21 @@ interface ApiError {
   detail: string
 }
 
+interface CalendarEventRequest {
+  event_date: string  // YYYY-MM-DD
+}
+
+interface CalendarEventResponse {
+  success: boolean
+  message: string
+  result: any
+  event_summary: {
+    title: string
+    date: string
+    time: string
+  }
+}
+
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`
@@ -25,6 +40,18 @@ class ApiClient {
     }
 
     return response.json()
+  }
+
+  async addToCalendar(
+    request: CalendarEventRequest
+  ): Promise<CalendarEventResponse> {
+    return this.request<CalendarEventResponse>(
+      `/add-to-calendar`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      }
+    )
   }
 
   async register(username: string, password: string, interest: string, level: string) {
@@ -196,6 +223,21 @@ class ApiClient {
     }>(`/users/${userId}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    })
+  }
+
+  async sharePaperToKakao(paperId: number, paperTitle: string, pdfUrl: string | null, aiSummary: string | null) {
+    return this.request<{
+      success: boolean
+      message: string
+      result: any
+    }>(`/papers/${paperId}/share-kakao`, {
+      method: "POST",
+      body: JSON.stringify({ 
+        paper_title: paperTitle,
+        pdf_url: pdfUrl,
+        ai_summary: aiSummary
+      }),
     })
   }
 
