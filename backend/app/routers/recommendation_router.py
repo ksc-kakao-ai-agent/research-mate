@@ -26,6 +26,7 @@ class PaperItem(BaseModel):
     title: str
     authors: List[str]
     recommended_at: str  # YYYY-MM-DD 형식
+    is_user_requested: bool
 
 
 class TodayRecommendationsResponse(BaseModel):
@@ -115,6 +116,10 @@ def format_date(date_obj: datetime) -> str:
 
 # ==================== API 엔드포인트 ====================
 
+DEMO_COMMON_REFERENCE_PAPER_ID = 99999999
+DEMO_COMMON_REFERENCE_TITLE = "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (RAG)"
+# ----------------------------------------------------------------------
+
 @router.get("/{user_id}/recommendations/today", response_model=TodayRecommendationsResponse, status_code=status.HTTP_200_OK)
 async def get_today_recommendations(user_id: int, db: Session = Depends(get_db)):
     """
@@ -152,13 +157,153 @@ async def get_today_recommendations(user_id: int, db: Session = Depends(get_db))
             paper_id=paper.paper_id,
             title=paper.title,
             authors=authors,
-            recommended_at=recommended_at_str
+            recommended_at=recommended_at_str,
+            is_user_requested=rec.is_user_requested
         ))
     
     return TodayRecommendationsResponse(
         date=today.strftime("%Y-%m-%d"),
         papers=papers_list,
         total_count=len(papers_list)
+    )
+
+
+@router.get("/{user_id}/recommendations/today/relations1", response_model=TodayRelationsResponse, status_code=status.HTTP_200_OK)
+async def get_today_recommendations_relations(user_id: int, db: Session = Depends(get_db)):
+    """
+    오늘의 추천 논문 인용 관계 분석
+    """
+    # 오늘 날짜 (시간 제외)
+    today = date.today()
+    today_start = datetime.combine(today, datetime.min.time())
+    today_end = datetime.combine(today, datetime.max.time())
+    
+    # 1. 오늘 날짜의 추천 논문 조회 (기존 로직 유지 - DB에서 오늘 추천된 논문 3개를 가져옴)
+    recommendations = db.query(Recommendation).filter(
+        and_(
+            Recommendation.user_id == user_id,
+            Recommendation.recommended_at >= today_start,
+            Recommendation.recommended_at <= today_end,
+            Recommendation.is_user_requested == False # <<< 추가된 조건
+        )
+    ).order_by(Recommendation.recommended_at.desc()).all()
+    
+    # 데모를 위해 최소 3개의 논문이 필요하다고 가정 (DB에 3개 이상 있어야 함)
+    if len(recommendations) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="오늘 추천된 논문이 3개 미만이거나 없습니다. 데모를 위해 3개 이상 필요합니다."
+        )
+    
+    # 논문 정보 수집 (상위 3개만 사용)
+    papers_for_analysis = []
+    paper_id_to_paper = {}
+    
+    for rec in recommendations[:3]: # 상위 3개만 사용
+        paper = rec.paper
+        if not paper:
+            continue
+        
+        # external_id에서 arxiv_id 추출 (데모에서는 필수는 아니지만, 기존 로직 유지)
+        arxiv_id = None
+        if paper.external_id:
+            if paper.external_id.startswith("arXiv:"):
+                arxiv_id = paper.external_id.replace("arXiv:", "")
+            else:
+                arxiv_id = paper.external_id
+        
+        # arxiv_id가 없어도 시연을 위해 db_paper_id는 있어야 함
+        if not paper.paper_id:
+             continue
+        
+        paper_dict = {
+            "arxiv_id": arxiv_id,
+            "title": paper.title,
+            "db_paper_id": paper.paper_id
+        }
+        papers_for_analysis.append(paper_dict)
+        paper_id_to_paper[paper.paper_id] = paper
+        
+    if len(papers_for_analysis) < 3:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DB에서 유효한 논문 ID를 가진 추천 논문 3개를 찾을 수 없습니다."
+         )
+    
+    # 2. 노드 및 에지 생성 (데모용 하드코딩 시작)
+    nodes = []
+    edges = []
+    recommended_paper_ids = []
+    
+    # 2-1. 추천 논문 노드 생성
+    for paper_dict in papers_for_analysis:
+        paper_id = paper_dict.get("db_paper_id")
+        nodes.append(GraphNode(
+            id=paper_id,
+            title=paper_dict.get("title", ""),
+            type="recommended"
+        ))
+        recommended_paper_ids.append(paper_id)
+        
+    # 2-2. 하드코딩된 공통 참고문헌 노드 생성
+    # RAG 대표 논문 정보 (DEMO_COMMON_REFERENCE_PAPER_ID는 시연용 임시 ID)
+    rag_ref_id = DEMO_COMMON_REFERENCE_PAPER_ID 
+    rag_ref_title = DEMO_COMMON_REFERENCE_TITLE
+    cited_by_count = len(recommended_paper_ids) # 3
+    
+    nodes.append(GraphNode(
+        id=rag_ref_id,
+        title=rag_ref_title,
+        type="common_reference"
+    ))
+    
+    # 2-3. 하드코딩된 에지 생성 (추천 논문 3개가 RAG 논문을 모두 인용하는 것으로 설정)
+    for citing_id in recommended_paper_ids:
+        # 모든 인용 관계를 is_influential=True로 설정하여 강조
+        edges.append(GraphEdge(
+            source=citing_id,
+            target=rag_ref_id, # RAG 논문 ID
+            type="cites",
+            is_influential=True
+        ))
+    
+    # 3. AnalysisData의 common_references 하드코딩
+    common_references = []
+    suggestion = f"오늘 추천된 논문 {cited_by_count}편이 모두 이 논문을 인용하고 있습니다. 내일 추천해드릴까요?"
+    
+    common_references.append(CommonReference(
+        paper_id=rag_ref_id,
+        title=rag_ref_title,
+        cited_by_count=cited_by_count,
+        suggestion=suggestion
+    ))
+    
+    # Kanana 호출 및 DB CitationGraph 조회 로직은 스킵됨
+    # -> 공통 참고문헌을 1개(RAG 논문)만 만들었으므로 Kanana 로직(else)은 실행되지 않음.
+    
+    # 4. 클러스터 생성 (기존 로직 유지 또는 데모에 맞게 수정)
+    clusters = []
+    if len(papers_for_analysis) >= 2:
+        # 데모 시연을 위한 클러스터링
+        theme = "RAG Model Variants"  # 데모용 주제
+        cluster_papers = [p.get("db_paper_id") for p in papers_for_analysis[:3] if p.get("db_paper_id")]
+        if cluster_papers:
+            clusters.append(Cluster(
+                theme=theme,
+                papers=cluster_papers
+            ))
+    
+    # 5. 최종 응답 반환
+    return TodayRelationsResponse(
+        date=today.strftime("%Y-%m-%d"),
+        graph=GraphData(
+            nodes=nodes,
+            edges=edges
+        ),
+        analysis=AnalysisData(
+            common_references=common_references, # 하드코딩된 RAG 논문 1개만 포함
+            clusters=clusters
+        )
     )
 
 
@@ -478,5 +623,30 @@ async def request_paper(user_id: int, request: RequestPaperRequest, db: Session 
         message="내일 논문 추천 목록에 추가되었습니다.",
         paper_id=paper.paper_id,
         title=paper.title,
+        scheduled_date=tomorrow.strftime("%Y-%m-%d")
+    )
+
+@router.post("/{user_id}/recommendations/request-paper1", response_model=RequestPaperResponse, status_code=status.HTTP_201_CREATED)
+async def request_paper(user_id: int, request: RequestPaperRequest, db: Session = Depends(get_db)):
+    """
+    공통 참고문헌 추천 수락
+    인용 관계 분석을 통해 제안된 다음 추천 논문을 내일 추천 목록에 추가
+    """
+    # --- ⚠️ 데모 모드를 위해 아래 로직은 무시됩니다 ⚠️ ---
+    # 실제 프로덕션 환경에서는 이 코드를 사용하지 마세요.
+
+    # 논문 조회 (논문이 존재하는지만 확인. Paper 모델이 필요합니다.)
+    
+    
+    # 내일 날짜 계산
+    tomorrow = date.today() + timedelta(days=1)
+
+    # 💡 데이터베이스 작업(existing 확인, new_recommendation 생성 및 commit)을 모두 건너뛰고
+    #    무조건 성공 응답을 반환합니다.
+    
+    return RequestPaperResponse(
+        message="내일 논문 추천 목록에 추가되었습니다.",
+        paper_id=1000,
+        title="title",
         scheduled_date=tomorrow.strftime("%Y-%m-%d")
     )

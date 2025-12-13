@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar } from "lucide-react"
 import PaperGraph from "@/components/paper-graph"
+import { cn } from "@/lib/utils"
 
 interface RelationsData {
   date: string
@@ -40,15 +41,20 @@ interface RelationsData {
   }
 }
 
+interface PaperItem {
+  paper_id: number
+  title: string
+  authors: string[]
+  recommended_at: string
+  is_user_requested: boolean // ✅ 추가된 필드
+}
+
+
 export default function RecommendationsPage() {
   const { user } = useAuth()
   const router = useRouter()
-  const [papers, setPapers] = useState<Array<{
-      paper_id: number
-      title: string
-      authors: string[]
-      recommended_at: string
-    }>>([])
+  const [papers, setPapers] = useState<PaperItem[]>([])
+
   const [relationsData, setRelationsData] = useState<RelationsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingRelations, setIsLoadingRelations] = useState(true)
@@ -72,7 +78,7 @@ export default function RecommendationsPage() {
 
     try {
       const data = await api.getTodayRecommendations(user.id)
-      setPapers(data.papers.slice(0, 3))
+      setPapers(data.papers)
     } catch (error) {
       console.error("Failed to fetch recommendations:", error)
       setError("추천 논문을 불러오는데 실패했습니다.")
@@ -121,7 +127,7 @@ export default function RecommendationsPage() {
     return null
   }
 
-  const todayPapers = papers.slice(0, 3)
+  const todayPapers = papers
   const hasCommonReferences = relationsData && relationsData.analysis.common_references.length > 0
 
   return (
@@ -157,7 +163,11 @@ export default function RecommendationsPage() {
               {todayPapers.map((paper, index) => (
                 <Card
                   key={paper.paper_id}
-                  className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50"
+                  // 4. is_user_requested에 따라 스타일을 조건부로 변경합니다.
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-lg hover:border-primary/50",
+                    paper.is_user_requested && "bg-amber-50/50 border-amber-300 ring-4 ring-amber-200/50" // 다른 색상으로 강조
+                  )}
                   onClick={() => router.push(`/paper/${paper.paper_id}`)}
                 >
                   <CardHeader>
@@ -168,6 +178,11 @@ export default function RecommendationsPage() {
                           <Badge variant="outline">
                             {user.level === "beginner" ? "초급" : user.level === "intermediate" ? "중급" : "고급"}
                           </Badge>
+                          {paper.is_user_requested && ( // ✅ 사용자 요청 논문 뱃지 추가
+                            <Badge variant="default" className="bg-amber-500 hover:bg-amber-600">
+                              ✍️ 직접 요청했어요
+                            </Badge>
+                          )}
                         </div>
                         <CardTitle className="text-xl mb-2 text-balance">{paper.title}</CardTitle>
                         <CardDescription className="flex items-center gap-2 text-sm">
@@ -176,7 +191,12 @@ export default function RecommendationsPage() {
                         </CardDescription>
                         <CardDescription className="text-sm mt-2">{paper.authors.join(", ")}</CardDescription>
                       </div>
-                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary font-bold text-xl">
+                      <div 
+                        className={cn(
+                          "flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl",
+                          paper.is_user_requested ? "bg-amber-500 text-white" : "bg-primary/10 text-primary" // ✅ 색상 조건부 변경
+                        )}
+                      >
                         {index + 1}
                       </div>
                     </div>

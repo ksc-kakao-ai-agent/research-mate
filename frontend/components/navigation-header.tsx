@@ -21,7 +21,7 @@ export function NavigationHeader() {
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
         >
           <BookOpen className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-bold">Research Paper Hub</h1>
+          <h1 className="text-xl font-bold">Research Mate</h1>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground">{user?.username}</span>
