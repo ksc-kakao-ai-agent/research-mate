@@ -9,18 +9,23 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+
+
+interface PaperItem {
+  paper_id: number
+  title: string
+  authors: string[]
+  recommended_at: string
+  is_user_requested: boolean // ✅ 추가된 필드
+}
+
 
 export default function HistoryPage() {
   const { user } = useAuth()
   const router = useRouter()
-  const [papers, setPapers] = useState<
-    Array<{
-      paper_id: number
-      title: string
-      authors: string[]
-      recommended_at: string
-    }>
-  >([])
+  const [papers, setPapers] = useState<PaperItem[]>([]) // 타입을 PaperItem[]으로 변경
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -91,7 +96,11 @@ export default function HistoryPage() {
             {papers.map((paper) => (
               <Card
                 key={paper.paper_id}
-                className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 group"
+                // 2. is_user_requested에 따라 스타일을 조건부로 변경합니다.
+                className={cn(
+                  "cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 group",
+                  paper.is_user_requested && "bg-amber-50/50 border-amber-300 ring-4 ring-amber-200/50" // 요청된 논문 강조
+                )}
                 onClick={() => router.push(`/paper/${paper.paper_id}`)}
               >
                 <CardHeader>
@@ -102,6 +111,11 @@ export default function HistoryPage() {
                         <Badge variant="outline">
                           {user.level === "beginner" ? "초급" : user.level === "intermediate" ? "중급" : "고급"}
                         </Badge>
+                        {paper.is_user_requested && ( // 3. 사용자 요청 논문 뱃지 추가
+                          <Badge variant="default" className="bg-amber-500 hover:bg-amber-600">
+                            ✍️ 직접 요청했어요
+                          </Badge>
+                        )}
                       </div>
                       <CardTitle className="text-xl mb-2 text-balance group-hover:text-primary transition-colors">
                         {paper.title}

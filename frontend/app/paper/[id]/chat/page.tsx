@@ -83,7 +83,7 @@ export default function ChatPage() {
     setIsLoading(true)
 
     try {
-      const response = await api.chatWithPaper(paperId, user.id, input)
+      const response = await api.chatWithPaper(paperId, user!.id, input)
 
       const aiResponse: Message = {
         role: "assistant",

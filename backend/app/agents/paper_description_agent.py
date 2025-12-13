@@ -12,29 +12,33 @@ class PaperDescriptionAgent:
         self.db = db
         # 난이도별 요약 스타일 프롬프트
         self.level_prompts = {
-            "beginner": """초보자 수준의 사용자를 위해 다음 내용을 포함하여 설명해주세요:
-1. 핵심 개념과 용어를 쉽게 설명
-2. 논문의 주요 목적과 기여를 간단명료하게
-3. 기술적 세부사항보다는 전체적인 흐름과 의미 중심
-4. 전문 용어가 나오면 괄호 안에 쉬운 설명 추가""",
+            "beginner": """다음 논문을 초보자가 이해할 수 있도록 200-300자 이내로 요약해주세요.
+
+요구사항:
+- 논문이 해결하려는 문제를 한 문장으로 설명
+- 제안하는 방법이나 아이디어를 쉽게 설명
+- 왜 중요한지 간단히 설명
+- 전문 용어는 괄호 안에 쉬운 설명 추가
+- 마크다운 강조 표시(**, ##, ---)를 사용하지 말 것
+- 자연스러운 문장으로 작성""",
             
-            "intermediate": """중급자 수준의 사용자를 위해 다음 내용을 포함하여 설명해주세요:
-1. 논문의 핵심 기여와 방법론 요약
-2. 주요 기술적 개념과 접근 방식 설명
-3. 연구의 의의와 기존 연구와의 차별점
-4. 적절한 수준의 기술 용어 사용""",
+            "intermediate": """다음 논문을 중급자가 이해할 수 있도록 300-400자 이내로 요약해주세요.
+
+요구사항:
+- 논문의 핵심 기여 2-3가지
+- 주요 방법론이나 접근 방식
+- 기존 연구와의 차별점
+- 마크다운 강조 표시(**, ##, ---)를 사용하지 말 것
+- 자연스러운 문장으로 작성""",
             
-            "advanced": """고급자 수준의 사용자를 위해 다음 내용을 포함하여 설명해주세요:
-1. 논문의 핵심 기여를 압축적으로 정리
-2. 방법론의 기술적 세부사항과 혁신점
-3. 연구의 한계와 향후 방향성
-4. 전문 용어와 기술적 표현 사용"""
-        }
-        # 프롬프트에 넣을 한글 레벨 라벨
-        self.level_labels = {
-            "beginner": "초보자",
-            "intermediate": "중급자",
-            "advanced": "고급자",
+            "advanced": """다음 논문을 고급자가 이해할 수 있도록 300-400자 이내로 요약해주세요.
+
+요구사항:
+- 핵심 기술적 기여를 압축적으로 정리
+- 방법론의 기술적 세부사항과 혁신점
+- 연구의 한계나 향후 방향성
+- 마크다운 강조 표시(**, ##, ---)를 사용하지 말 것
+- 자연스러운 문장으로 작성"""
         }
     
     def _get_paper_from_db(self, paper_id: int) -> Optional[Dict]:
@@ -70,34 +74,30 @@ class PaperDescriptionAgent:
         abstract = paper.get("abstract", "") or ""
         authors = paper.get("authors", [])
         if isinstance(authors, list):
-            authors = ", ".join(authors)
+            authors = ", ".join(authors[:3])
+            if len(paper.get("authors", [])) > 3:
+                authors += " 외"
         
         # full_text가 있으면 더 풍부한 내용 기반으로 요약
         full_text = paper.get("full_text", "") or ""
-        content = full_text[:2000] if full_text else abstract  # 처음 2000자만 사용
+        content = full_text[:2000] if full_text else abstract[:1000]
         
         level_prompt = self.level_prompts.get(
             level,
             self.level_prompts["intermediate"],
         )
-        level_label = self.level_labels.get(level, "중급자")
-        
-        # f-string 안에서 백슬래시 사용 불가하므로 변수로 분리
-        content_text = f'논문 전문 (일부):\n{content}' if full_text else ''
         
         prompt = f"""{level_prompt}
 
 논문 제목: {title}
 저자: {authors}
-원문 초록:
-{abstract}
+초록:
+{content}
 
-{content_text}
-
-위 논문에 대한 {level_label} 수준의 요약을 작성해주세요."""
+위 내용을 바탕으로 요약을 작성해주세요."""
         
-        summary = call_kanana(prompt, temperature=0.2, max_tokens=1024)
-        return summary
+        summary = call_kanana(prompt, temperature=0.2, max_tokens=512)
+        return summary.strip()
     
     def validate_quality(self, summary: str, abstract: str) -> bool:
         """요약 품질 검증 (간단한 휴리스틱)"""

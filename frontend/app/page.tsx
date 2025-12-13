@@ -25,6 +25,8 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAddingToCalendar, setIsAddingToCalendar] = useState(false)
+  const [arxivId, setArxivId] = useState("")
+  const [isAddingPaper, setIsAddingPaper] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -69,6 +71,28 @@ export default function HomePage() {
       alert("톡캘린더 일정 추가에 실패했습니다.")
     } finally {
       setIsAddingToCalendar(false)
+    }
+  }
+
+
+  const handleAddPaper = async () => {
+    if (!user) return
+  
+    if (!arxivId.trim()) {
+      alert("arXiv ID를 입력해주세요.")
+      return
+    }
+
+    setIsAddingPaper(true)
+    try {
+      const response = await api.addPaperByArxivId(arxivId, user.id)
+      alert(response.message)
+      setArxivId("")
+    } catch (error) {
+      console.error("Failed to add paper:", error)
+      alert("논문 추가에 실패했습니다.")
+    } finally {
+      setIsAddingPaper(false)
     }
   }
 
@@ -178,6 +202,37 @@ export default function HomePage() {
             </CardHeader>
           </Card>
         )}
+
+        {/* 직접 논문 추가하기 Card - 오늘의 메시지 바로 아래 */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="text-lg">직접 공부하고 싶은 논문 추가하기</CardTitle>
+            <CardDescription>arXiv ID를 입력하면 논문이 학습 목록에 추가됩니다</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="예: 2005.11401"
+                value={arxivId}
+                onChange={(e) => setArxivId(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter") {
+                  handleAddPaper()
+                  }
+                }}
+                className="flex-1 px-3 py-2 border border-input rounded-md bg-background"
+                disabled={isAddingPaper}
+              />
+              <Button 
+                onClick={handleAddPaper} 
+                disabled={isAddingPaper || !arxivId.trim()}
+              >
+                {isAddingPaper ? "추가 중..." : "추가하기"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Navigation Cards */}
         <div className="grid gap-6 md:grid-cols-2">

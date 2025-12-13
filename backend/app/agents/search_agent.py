@@ -30,13 +30,15 @@ class SearchAgent:
         query = " OR ".join([f'all:"{kw}"' for kw in keywords[:3]])  # 상위 3개 키워드로 검색
         
         try:
+            # arXiv 클라이언트 생성 시 최신 API endpoint 사용
+            client = arxiv.Client()
             search = arxiv.Search(
                 query=query,
-                max_results=min(max_results,50),
+                max_results=min(max_results, 50),
                 sort_by=arxiv.SortCriterion.SubmittedDate
             )
             
-            for result in search.results():
+            for result in client.results(search):
                 papers.append({
                     "arxiv_id": result.entry_id.split("/")[-1],
                     "title": result.title,
@@ -149,4 +151,3 @@ class SearchAgent:
                     paper["db_paper_id"] = existing.paper_id
         
         return enriched_papers
-

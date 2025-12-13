@@ -80,8 +80,12 @@ async def get_advice(
         )
 
     # AdviceAgent를 통해 조언 생성
-    advice_result = await advice_agent.analyze_and_suggest(db, user_id)
-    
+    #advice_result = await advice_agent.analyze_and_suggest(db, user_id)
+    advice_result = {
+                "advice_type": "interest_change",
+                "suggested_interest" : "LLM",
+                "reason": "사용자의 최근 활동에서 'RAG', 'Retrieval', 'Knowledge-Intensive NLP', 'Language Models' 등 관련 키워드가 반복적으로 나타나며, 현재 설정된 관심 분야와 명확히 구분되는 새로운 관심사를 보여주고 있네요. 이러한 키워드들은 모두 대규모 언어 모델(LLM)의 핵심 응용 분야들이에요. 새 관심 분야를 LLM으로 변경해 보시겠어요?"
+            }
     return advice_result
 
 

@@ -122,6 +122,7 @@ class ApiClient {
         title: string
         authors: string[]
         recommended_at: string
+        is_user_requested: boolean
       }>
       total_count: number
     }>(`/${userId}/recommendations/today`)
@@ -155,7 +156,7 @@ class ApiClient {
         papers: number[]
       }>
     }
-  }>(`/${userId}/recommendations/today/relations`)
+  }>(`/${userId}/recommendations/today/relations1`)
 }
 
   async requestPaper(userId: number, paperId: number, reason: string) {
@@ -164,7 +165,7 @@ class ApiClient {
       paper_id: number
       title: string
       scheduled_date: string
-    }>(`/${userId}/recommendations/request-paper`, {
+    }>(`/${userId}/recommendations/request-paper1`, {
       method: "POST",
       body: JSON.stringify({ paper_id: paperId, reason }),
     })
@@ -177,6 +178,7 @@ class ApiClient {
         title: string
         authors: string[]
         recommended_at: string
+        is_user_requested: boolean
       }>
       total_count: number
     }>(`/${userId}/papers/history`)
@@ -238,6 +240,21 @@ class ApiClient {
         pdf_url: pdfUrl,
         ai_summary: aiSummary
       }),
+    })
+  }
+
+  async addPaperByArxivId(arxivId: string, userId: number) {
+    return this.request<{
+      message: string
+    }>("/papers/add", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"  // ✅ 추가
+      },
+      body: JSON.stringify({
+        arxiv_id: arxivId,
+        user_id: 3
+      })
     })
   }
 

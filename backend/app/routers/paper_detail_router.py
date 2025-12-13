@@ -22,6 +22,7 @@ class PaperHistoryItem(BaseModel):
     title: str
     authors: List[str]
     recommended_at: str  # YYYY-MM-DD 형식
+    is_user_requested: bool
 
 
 class PaperHistoryResponse(BaseModel):
@@ -118,7 +119,8 @@ async def get_paper_history(user_id: int, db: Session = Depends(get_db)):
             paper_id=paper.paper_id,
             title=paper.title,
             authors=authors,
-            recommended_at=recommended_at_str
+            recommended_at=recommended_at_str,
+            is_user_requested=rec.is_user_requested
         ))
     
     return PaperHistoryResponse(

@@ -135,7 +135,7 @@ export default function PaperDetailPage() {
 
       <main className="container mx-auto px-4 py-8 max-w-5xl">
         <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => router.push("/")}>
+          <Button variant="ghost" onClick={() => router.push("/recommendations")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             뒤로 가기
           </Button>
